@@ -16,6 +16,7 @@ type GameState = {
   setDeposits: (deposits: Deposit[]) => void;
   addBullets: (bullets: Bullet[]) => void;
   setBullets: (bullets: Bullet[]) => void;
+  setTowerHealth: (id: string, health: number) => void;
 };
 
 export const useGameState = create<GameState>()(immer((set) => ({
@@ -56,5 +57,14 @@ export const useGameState = create<GameState>()(immer((set) => ({
   },
   setBullets: (bullets: Bullet[]) => {
     set({ bullets });
+  },
+  setTowerHealth: (id: string, health: number) => {
+    set((state) => {
+      const tower = state.towers.find((tower) => tower.id === id);
+      if (!tower) {
+        return;
+      }
+      tower.health = health;
+    });
   },
 })));

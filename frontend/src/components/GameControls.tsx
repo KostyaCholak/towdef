@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Bullet, towerConfigs, type Deposit, type Tower } from "../../../types";
+import { Bullet, TowerConfig, towerConfigs, type Deposit, type Tower } from "../../../types";
 import { useGameState } from "../storage";
 import { init, onMessage, onOpen } from "../utils/api";
 
@@ -8,15 +8,19 @@ const BuildTowerButton = (props: {
   tower_id: string;
   title: string;
   activeId: string;
+  config: TowerConfig;
   onActivate: (id: string) => void;
 }) => {
   const isActive = props.activeId === props.tower_id;
   return (
     <button
       onClick={() => props.onActivate(props.tower_id)}
-      className={`${isActive ? "bg-blue-500" : "bg-slate-400"} text-white p-2`}
+      className={`${isActive ? "bg-blue-500" : "bg-slate-400"} text-white p-2 border border-r-0 last:border-r`}
     >
-      {props.title}
+      {props.title} 
+      <span className="text-xs">
+        &nbsp;[{props.config.price}$]
+      </span>
     </button>
   );
 };
@@ -31,7 +35,7 @@ const GameControls: React.FC = () => {
     activeTowerType, 
     setTowerType,
     setDeposits,
-    addBullets,
+    // addBullets,
   ] = useGameState((state) => [
     state.money,
     state.setMoney,
@@ -40,7 +44,7 @@ const GameControls: React.FC = () => {
     state.activeTowerType,
     state.setTowerType,
     state.setDeposits,
-    state.addBullets,
+    // state.addBullets,
   ]);
 
   useEffect(() => {
@@ -65,17 +69,18 @@ const GameControls: React.FC = () => {
     onMessage("you.state", (message: any) => {
       setMoney(message.money);
     });
-    onMessage("game.bullets", (bullets: Bullet[]) => {
-      addBullets(bullets);
+    onMessage("game.bullets", (_bullets: Bullet[]) => {
+      // addBullets(bullets);
     });
   }, []);
 
   return (
     <div className="fixed bottom-0 left-0 bg-slate-400 w-full p-0 text-white flex justify-between gap-2">
-      <div className="flex gap-2">
+      <div className="flex">
         {Array.from(towerConfigs).map(([key, value]) => (
           <BuildTowerButton
             key={key}
+            config={value}
             tower_id={key}
             title={value.name}
             activeId={activeTowerType}

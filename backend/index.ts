@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid';
 import { WebSocketServer } from 'ws';
 import { Bullet, Deposit, GRID_CELLS_X, GRID_CELLS_Y, Player, Tower, towerConfigs } from '../types';
 
+const gameStarted = false;
 const wss = new WebSocketServer({ port: 3001 });
 
 const players = new Map<string, Player>();
@@ -58,7 +59,7 @@ wss.on('connection', function connection(ws) {
 });
 
 setCallback('player.join', (ws, player: Player) => {
-  if (!players.has(player.id)) {
+  if (!players.has(player.id) || gameStarted) {
     players.set(player.id, player);
   } else {
     console.log("Player already exists");
@@ -78,22 +79,11 @@ setCallback('player.join', (ws, player: Player) => {
   // };
   // players.set("second", player2);
 
-  const depositsCount = 200;
-  for (let i = 0; i < depositsCount; i++) {
-    const x = Math.floor(Math.random() * GRID_CELLS_X / 2);
-    const y = Math.floor(Math.random() * GRID_CELLS_Y);
-    if (deposits.find((deposit) => deposit.x === x && deposit.y === y)) {
-      continue;
-    }
-    deposits.push({ x, y });
-    deposits.push({ x: GRID_CELLS_X - x - 1, y });
-  }
-
   broadcast('game.setup', {
     deposits: deposits,
   });
 
-  player.money = 100;
+  player.money = 30;
 
   wsToId.set(ws, player.id);
   idToWs.set(player.id, ws);
@@ -110,12 +100,15 @@ const startGame = () => {
   const vals = players.values();
   const player1 = vals.next().value;
   const player2 = vals.next().value;
-  console.log(player1, player2);
 
   const depositsCount = 200;
   for (let i = 0; i < depositsCount; i++) {
-    const x = Math.floor(Math.random() * GRID_CELLS_X / 2);
+    let x = Math.floor(Math.random() * GRID_CELLS_X / 2);
     const y = Math.floor(Math.random() * GRID_CELLS_Y);
+    console.log(x, 0.5 * GRID_CELLS_X / 2);
+    if (x < 0.5 * GRID_CELLS_X / 2) {
+      x += Math.floor(Math.random() * GRID_CELLS_X / 2);
+    }
     if (deposits.find((deposit) => deposit.x === x && deposit.y === y)) {
       continue;
     }
@@ -128,7 +121,7 @@ const startGame = () => {
   });
 
   const towerConfig = towerConfigs.get("basic");
-  const [x, y] = [40, 20];
+  const [x, y] = [30, 20];
   if (!towerConfig) {
     return;
   }
@@ -164,15 +157,18 @@ setCallback('game.build', (ws, tower: Tower) => {
 
   const player = players.get(wsToId.get(ws) ?? "");
   if (!player) {
+    console.log("player not found");
     return;
   }
 
   const towerConfig = towerConfigs.get(tower.type);
   if (!towerConfig) {
+    console.log("tower config not found");
     return;
   }
 
   if (player.money < towerConfig.price) {
+    console.log("not enough money");
     return;
   }
 
@@ -216,12 +212,45 @@ setCallback('game.build', (ws, tower: Tower) => {
   send(ws, "you.state", player);
 });
 
+setCallback('game.destroy', (ws, data: { id: string, type: string }) => {
+  const player = players.get(wsToId.get(ws) ?? "");
+  if (!player) {
+    console.log("player not found");
+    return;
+  }
+
+  const tower = towers.find((tw) => tw.id === data.id);
+  if (!tower) {
+    console.log("tower not found");
+    return;
+  }
+  if (tower.owner !== player.id) {
+    console.log("not your tower");
+    return;
+  }
+  const towerConfig = towerConfigs.get(tower.type);
+  if (!towerConfig) {
+    console.log("tower config not found");
+    return;
+  }
+
+  const myTowers = towers.filter((tower) => tower.owner === player.id && (tower.captured_cells.length > 1 || towerConfig.territory_capture <= 1));
+  if (myTowers.length === 1) {
+    console.log("can't destroy last tower");
+    return;
+  }
+  towers.splice(towers.indexOf(tower), 1);
+  player.money += Math.round(towerConfig.price * 0.5 * (tower.health / towerConfig.health));
+  broadcast('game.destroy', tower.id);
+  send(ws, "you.state", player);
+});
+
 setInterval(() => {
   players.forEach((player) => {
     // find all miners
-    const miners = towers.filter((tower) => tower.type === "miner");
+    const miners = towers.filter((tower) => tower.type === "miner" && tower.health > 0 && tower.owner === player.id);
     // increase the money of the player
-    player.money += miners.length * 1;
+    player.money += miners.length * 1 + 1;
     const ws = idToWs.get(player.id);
     if (!ws) {
       players.delete(player.id);
@@ -240,6 +269,7 @@ setInterval(() => {
     }
     const radius = tower.type === "basic" ? 7 : 12;
     let target: Tower | null = null;
+    let minDistance = Infinity;
     for (const otherTower of towers) {
       if (otherTower.owner === tower.owner) {
         continue;
@@ -248,16 +278,22 @@ setInterval(() => {
         continue;
       }
       const distance = Math.sqrt(Math.pow(otherTower.x - tower.x, 2) + Math.pow(otherTower.y - tower.y, 2));
-      if (distance < radius) {
+      if (distance < radius && distance < minDistance) {
         target = otherTower;
-        break;
+        minDistance = distance;
       }
     }
     if (!target) {
       return;
     }
 
-    if (Math.random() > 0.7) {
+    const towerConfig = towerConfigs.get(tower.type);
+    if (!towerConfig) {
+      console.log("tower config not found while attacking");
+      return;
+    }
+
+    if (Math.random() * towerConfig.attackSpeed < 0.3) {
       return;
     }
     // create a bullet
@@ -272,7 +308,7 @@ setInterval(() => {
     dx = dx / currentSpeed * speed;
     dy = dy / currentSpeed * speed;
 
-    target.health -= 1;
+    target.health -= 2;
 
     newBullets.push({
       id: uuid(),
@@ -286,7 +322,9 @@ setInterval(() => {
       }
     });
   });
-  broadcast('game.bullets', newBullets);
+  if (newBullets.length > 0) {
+    broadcast('game.bullets', newBullets);
+  }
 
   setTimeout(() => {
     // check if any towers are dead

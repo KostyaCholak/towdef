@@ -8,6 +8,7 @@ export type TowerConfig = {
   description: string;
   territory_capture: number; // Amount of territory captured by this tower
   health: number;
+  attackSpeed: number;
 };
 
 // Define a player with a unique ID, name, money, and a list of towers they own
@@ -57,7 +58,8 @@ export type GameState = {
 };
 
 export const towerConfigs = new Map<string, TowerConfig>([
-  ["basic", { price: 5, name: "Basic", description: "Basic tower", territory_capture: 4, health: 10 }],
-  ["advanced", { price: 10, name: "Advanced", description: "Advanced tower", territory_capture: 7, health: 20 }],
-  ["miner", { price: 10, name: "Miner", description: "Miner tower", territory_capture: 0, health: 5 }],
+  ["basic", { price: 20, name: "Basic", description: "Basic tower", territory_capture: 4, health: 20, attackSpeed: 0.5 }],
+  ["advanced", { price: 40, name: "Advanced", description: "Advanced tower", territory_capture: 7, health: 30, attackSpeed: 1.0 }],
+  ["miner", { price: 20, name: "Miner", description: "Miner tower", territory_capture: 1, health: 10, attackSpeed: 0.0 }],
+  ["wall", { price: 20, name: "Wall", description: "Wall tower", territory_capture: 1, health: 50, attackSpeed: 0.0 }],
 ]);

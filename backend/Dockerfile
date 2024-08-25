@@ -1,5 +1,4 @@
-# Use the official Node.js 18 image as the base image
-FROM node:18
+FROM oven/bun:1
 
 # Set the working directory inside the container
 WORKDIR /usr/src/app
@@ -8,13 +7,14 @@ WORKDIR /usr/src/app
 COPY package*.json ./
 
 # Install the dependencies
-RUN npm install
+RUN bun install
 
 # Copy the rest of the application code to the working directory
 COPY . .
+COPY ./types.ts ..
 
 # Expose the port that the app runs on
-EXPOSE 3000
+EXPOSE 3001
 
 # Define the command to run the application
-CMD ["npm", "start"]
+CMD ["bun", "run", "dev"]

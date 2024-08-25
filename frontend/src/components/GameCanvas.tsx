@@ -3,12 +3,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Circle, Layer, Line, Rect, Stage } from "react-konva";
 // import { joinGameRoom, room } from "../utils/colyseusClient";
-import { Deposit, GRID_CELLS_X, GRID_CELLS_Y, Tower } from "../../../types";
+import { Deposit, GRID_CELLS_X, GRID_CELLS_Y, Tower, towerConfigs } from "../../../types";
 import { useGameState } from "../storage";
 import { playerId, send } from "../utils/api";
 
 const CELL_SIZE = 20;
 
+const maxHealthMap = new Map<string, number>(
+  Array.from(towerConfigs).map(([key, value]) => ([ key, value.health ]))
+);
 
 const Grid = (props: {
   offset: { x: number, y: number },
@@ -67,8 +70,42 @@ const getPlayerCells = (towers: Tower[], plrId: string) => {
 }
 
 const TowerComponent = (props: { tower: Tower }) => {
+  const maxHealth = maxHealthMap.get(props.tower.type) ?? 0;
+  const isFullHealth = props.tower.health === maxHealth;
+
+  let healthBar = null;
+
+  if (!isFullHealth) {
+    healthBar = (
+      <Rect
+        x={props.tower.x * CELL_SIZE}
+        y={props.tower.y * CELL_SIZE + CELL_SIZE - 4}
+        width={CELL_SIZE * props.tower.health / maxHealth}
+        height={2}
+        fill="red"
+        stroke="red"
+      />
+    );
+  }
+
+  if (props.tower.type === "wall") {
+    return (
+      <>
+      <Rect
+        x={props.tower.x * CELL_SIZE + CELL_SIZE * 0.1}
+        y={props.tower.y * CELL_SIZE + CELL_SIZE * 0.1}
+        width={CELL_SIZE * 0.8}
+        height={CELL_SIZE * 0.8}
+        fill="#3d405b"
+      />
+      {healthBar}
+      </>
+    );
+  }
+
   if (props.tower.type === "miner") {
     return (
+      <>
       <Rect
         x={props.tower.x * CELL_SIZE + CELL_SIZE / 6 }
         y={props.tower.y * CELL_SIZE + CELL_SIZE / 6 }
@@ -76,28 +113,30 @@ const TowerComponent = (props: { tower: Tower }) => {
         height={CELL_SIZE / 1.5}
         fill="green"
       />
+      {healthBar}
+      </>
     );
   }
   return (
+    <>
     <Circle
       x={props.tower.x * CELL_SIZE + CELL_SIZE / 2}
       y={props.tower.y * CELL_SIZE + CELL_SIZE / 2}
       radius={CELL_SIZE / 3}
-      fill="red"
+      fill="blue"
     />
+    {healthBar}
+    </>
   );
 };
 
-const Towers = (props: { offset: { x: number, y: number } }) => {
-  const [towers] = useGameState((state) => [
-    state.towers,
-  ]);
-  const allPlayers = [...new Set(towers.map((tower) => tower.owner))];
+const Towers = (props: { towers: Tower[], offset: { x: number, y: number } }) => {
+  const allPlayers = [...new Set(props.towers.map((tower) => tower.owner))];
   allPlayers.sort((a, b) => a === playerId ? 1 : b === playerId ? -1 : 0);
   const allCells: JSX.Element[] = [];
   const allKeys: Set<string> = new Set();
   allPlayers.forEach((plrId) => {
-    const plrCells = getPlayerCells(towers, plrId);
+    const plrCells = getPlayerCells(props.towers, plrId);
     for (const cell of plrCells) {
       if (allKeys.has(cell.key ?? "")) {
         continue;
@@ -107,13 +146,10 @@ const Towers = (props: { offset: { x: number, y: number } }) => {
     }
   });
 
-  console.log('TL', towers.length);
-  console.log(towers);
-
   return (
   <Layer offset={props.offset}>
     {allCells}
-    {towers.map((tower, index) => (
+    {props.towers.map((tower, index) => (
       <TowerComponent key={index} tower={tower} />
     ))}
   </Layer>
@@ -121,9 +157,11 @@ const Towers = (props: { offset: { x: number, y: number } }) => {
 }
 
 const Bullets = (props: { offset: { x: number, y: number } }) => {
-  const [bullets, setBullets] = useGameState((state) => [
+  const [bullets, towers, setBullets, setTowerHealth] = useGameState((state) => [
     state.bullets,
+    state.towers,
     state.setBullets,
+    state.setTowerHealth,
   ]);
 
   useEffect(() => {
@@ -134,6 +172,13 @@ const Bullets = (props: { offset: { x: number, y: number } }) => {
         }
         // if bullet is getting away from the target, return false
         if (Math.sign(bullet.dx) !== Math.sign(bullet.target.x - bullet.x) || Math.sign(bullet.dy) !== Math.sign(bullet.target.y - bullet.y)) {
+          // find the closest cell to the target
+          const tower = towers.find((tower) => tower.x === bullet.target.x && tower.y === bullet.target.y);
+          if (!tower) {
+            console.log("no tower found on bullet impact");
+            return false;
+          }
+          setTowerHealth(tower.id, Math.max(0, tower.health - 1));
           return false;
         }
         return true;
@@ -165,9 +210,11 @@ const Bullets = (props: { offset: { x: number, y: number } }) => {
 }
 
 const GameCanvas: React.FC = () => {
-  const [deposits, activeTowerType] = useGameState((state) => [
+  const [towers, deposits, activeTowerType, setTowerType] = useGameState((state) => [
+    state.towers,
     state.deposits,
     state.activeTowerType,
+    state.setTowerType,
   ]);
   const [isMouseDown, setIsMouseDown] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -178,8 +225,12 @@ const GameCanvas: React.FC = () => {
     x: CELL_SIZE * GRID_CELLS_X / 2 - window.innerWidth / 2,
     y: CELL_SIZE * GRID_CELLS_Y / 2 - window.innerHeight / 2,
   });
+  const divRef = useRef<HTMLDivElement>(null);
 
   const onMouseDown = (e: any) => {
+    if (e.button !== 0) {
+      return;
+    }
     setIsMouseDown(true);
     dragStart.current = { x: e.pageX, y: e.pageY };
     dragStartPosition.current = { x: offset.x, y: offset.y };
@@ -198,6 +249,9 @@ const GameCanvas: React.FC = () => {
   };
 
   const onMouseUp = (e: any) => {
+    if (e.button !== 0) {
+      return;
+    }
     if (!dragging) {
       const x = Math.floor((e.pageX + offset.x) / CELL_SIZE);
       const y = Math.floor((e.pageY + offset.y) / CELL_SIZE);
@@ -213,10 +267,44 @@ const GameCanvas: React.FC = () => {
     setDragging(false);
   };
 
+  const onContextMenu = (e: any) => {
+    e.preventDefault();
+
+    const x = Math.floor((e.pageX + offset.x) / CELL_SIZE);
+    const y = Math.floor((e.pageY + offset.y) / CELL_SIZE);
+    const tower = towers.find((tower: Tower) => tower.x === x && tower.y === y);
+    console.log('destroying tower', tower);
+    if (!tower) {
+      return;
+    }
+
+    send("game.destroy", {
+      id: tower.id,
+      type: tower.type,
+    } as Tower);
+  };
+
+  const onKeyDown = (e: any) => {
+    const towerTypes = Array.from(towerConfigs).map(([key, _]) => key);
+    for (let i = 0; i < towerTypes.length; i++) {
+      console.log(e.key, (i + 1) + "");
+      if (e.key === (i + 1) + "") {
+        setTowerType(towerTypes[i]);
+        break;
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (divRef.current) {
+      divRef.current.focus();
+    }
+  }, [divRef]);
+
   return (
-    <div tabIndex={1} className="w-screen h-screen" onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseMove={onMouseMove}>
+    <div tabIndex={1} className="w-screen h-screen" onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseMove={onMouseMove} onContextMenu={onContextMenu} onKeyDown={onKeyDown} ref={divRef}>
       <Stage width={window.innerWidth} height={window.innerHeight}>
-        <Towers offset={offset} />
+        <Towers offset={offset} towers={towers} />
         <Bullets offset={offset} />
         <Grid offset={offset} deposits={deposits} />
       </Stage>

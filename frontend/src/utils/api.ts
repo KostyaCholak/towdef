@@ -1,4 +1,5 @@
-export const ws = new WebSocket("ws://localhost:3001/ws");
+// export const ws = new WebSocket("ws://localhost:3001/ws");
+export const ws = new WebSocket("ws://95.179.224.85:7392/ws");
 
 export let playerId: string = localStorage.getItem("playerId") ?? "";
 while (!playerId || playerId === "null") {
