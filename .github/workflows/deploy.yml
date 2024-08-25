@@ -6,9 +6,6 @@ on:
 
 jobs:
   deploy:
-    permissions:
-      pages: write      # to deploy to Pages
-      id-token: write   # to verify the deployment originates from an appropriate source
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -31,11 +28,10 @@ jobs:
     - name: Build
       run: cd frontend && bun run build
 
-    - uses: actions/upload-artifact@v4
-      with:
-        path: ./frontend/dist/
-
     - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v4
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./dist
+
         
