@@ -32,7 +32,7 @@ jobs:
       run: cd frontend && bun run build
 
     - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-        with:
-          publish_dir: ./frontend/dist/
+      id: deployment
+      uses: actions/deploy-pages@v4
+      with:
+        publish_dir: ./frontend/dist/
