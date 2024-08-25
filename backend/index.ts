@@ -1,6 +1,17 @@
 import { v4 as uuid } from 'uuid';
-import { WebSocketServer } from 'ws';
 import { Bullet, Deposit, GRID_CELLS_X, GRID_CELLS_Y, Player, Tower, towerConfigs } from '../types';
+import { WebSocketServer } from 'ws';
+import https from 'https';
+import fs from 'fs';
+
+// Load the self-signed certificate and key
+const server = https.createServer({
+  cert: fs.readFileSync('keys/cert.pem'),
+  key: fs.readFileSync('keys/key.pem'),
+});
+
+// Create a WebSocket server using the HTTPS server
+const ws = new WebSocketServer({ server });
 
 const gameStarted = false;
 const wss = new WebSocketServer({ port: 3001 });
