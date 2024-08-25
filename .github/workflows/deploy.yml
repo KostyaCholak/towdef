@@ -1,0 +1,38 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    permissions:
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - uses: oven-sh/setup-bun@v2
+
+    - name: Set up Node.js 22.x
+      uses: actions/setup-node@v1
+      with:
+        node-version: 22.x
+
+    - name: Install dependencies
+      run: cd frontend && bun install
+
+    - name: Build
+      run: cd frontend && bun run build
+
+    - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          publish_dir: ./frontend/dist/
